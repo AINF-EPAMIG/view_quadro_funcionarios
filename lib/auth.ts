@@ -1,6 +1,15 @@
 import { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
+// Verificar se as variáveis de ambiente estão definidas
+if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+  throw new Error('Missing required Google OAuth environment variables');
+}
+
+if (!process.env.NEXTAUTH_SECRET) {
+  throw new Error('Missing NEXTAUTH_SECRET environment variable');
+}
+
 // Helper to parse comma/semicolon/space separated lists from env vars
 const parseList = (v?: string) =>
   (v ?? "")
@@ -17,20 +26,38 @@ export const authOptions: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          prompt: "consent",
+          access_type: "offline",
+          response_type: "code"
+        }
+      }
     }),
   ],
   callbacks: {
-    async signIn({ user }) {
+    async signIn({ user, account }) {
+      console.log('SignIn callback:', { user: user?.email, account: account?.provider });
+      
       const email = (user?.email || "").toLowerCase();
-      if (!email) return false;
+      if (!email) {
+        console.log('No email provided');
+        return false;
+      }
 
       // If any allowlist is configured, enforce it. If none provided, allow all (no restriction).
       const hasAllowlist = ALLOWED_EMAILS.length > 0 || ALLOWED_EMAIL_DOMAINS.length > 0;
-      if (!hasAllowlist) return true;
+      if (!hasAllowlist) {
+        console.log('No allowlist configured, allowing all emails');
+        return true;
+      }
 
       const domain = email.split("@")[1] || "";
       const emailAllowed = ALLOWED_EMAILS.includes(email);
       const domainAllowed = domain ? ALLOWED_EMAIL_DOMAINS.includes(domain) : false;
+      
+      console.log('Auth check:', { email, domain, emailAllowed, domainAllowed, allowedDomains: ALLOWED_EMAIL_DOMAINS });
+      
       return emailAllowed || domainAllowed;
     },
 
@@ -69,6 +96,20 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: "/login",
     error: "/login",
+  },
+  debug: process.env.NODE_ENV === 'development',
+  logger: {
+    error(code, metadata) {
+      console.error('NextAuth Error:', code, metadata);
+    },
+    warn(code) {
+      console.warn('NextAuth Warning:', code);
+    },
+    debug(code, metadata) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('NextAuth Debug:', code, metadata);
+      }
+    }
   },
   secret: process.env.NEXTAUTH_SECRET,
 };

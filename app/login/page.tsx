@@ -1,34 +1,69 @@
 "use client"
 
-
-import { useState } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { Loader2, AlertTriangle } from 'lucide-react'
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { signIn } from "next-auth/react"
+import { signIn, getSession } from "next-auth/react"
 import AppHeader from "@/components/AppHeader"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { useSearchParams, useRouter } from "next/navigation"
+import { ClientOnly } from "@/components/ClientOnly"
 
-export default function LoginPage() {
+function LoginContent() {
   const [isLoading, setIsLoading] = useState(false)
-  // Captura o erro diretamente da URL, garantindo SSR/hidratação
-  let errorMsg: string | null = null;
-  if (typeof window !== 'undefined') {
-    const err = new URLSearchParams(window.location.search).get('error');
-    if (err) {
-      const map: Record<string, string> = {
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
+  useEffect(() => {
+    // Verificar se já está autenticado
+    getSession().then((session) => {
+      if (session) {
+        router.push('/')
+        return
+      }
+    })
+
+    // Captura o erro da URL
+    const error = searchParams?.get('error')
+    if (error) {
+      const errorMap: Record<string, string> = {
+        Configuration: "Erro de configuração. Verifique as credenciais do Google OAuth.",
         AccessDenied: "Acesso negado. Seu e-mail não está autorizado.",
         OAuthAccountNotLinked: "Esta conta não está vinculada.",
-      };
-      errorMsg = map[err] || "Não foi possível autenticar. Tente novamente ou contate o suporte.";
+        OAuthCallback: "Erro no callback do OAuth. Tente novamente.",
+        OAuthSignin: "Erro ao fazer login com OAuth.",
+        OAuthCreateAccount: "Erro ao criar conta OAuth.",
+        EmailCreateAccount: "Erro ao criar conta com email.",
+        Callback: "Erro no callback de autenticação.",
+        EmailSignin: "Erro ao fazer login com email.",
+        CredentialsSignin: "Credenciais inválidas.",
+        SessionRequired: "Sessão necessária.",
+        Default: "Erro desconhecido de autenticação."
+      }
+      setErrorMsg(errorMap[error] || errorMap.Default)
     }
-  }
+  }, [searchParams, router])
 
   const handleGoogleLogin = async () => {
     setIsLoading(true)
+    setErrorMsg(null) // Limpar erro anterior
     try {
-      await signIn('google', { callbackUrl: '/' })
+      const result = await signIn('google', { 
+        callbackUrl: '/',
+        redirect: false  // Não redirecionar automaticamente para capturar erros
+      })
+      
+      if (result?.error) {
+        setErrorMsg("Erro ao fazer login. Tente novamente.")
+      } else if (result?.ok) {
+        router.push('/')
+      }
+    } catch (error) {
+      console.error('Erro no login:', error)
+      setErrorMsg("Erro inesperado. Tente novamente.")
     } finally {
       setIsLoading(false)
     }
@@ -74,13 +109,15 @@ export default function LoginPage() {
                   Faça login para acessar a View do Quadro de Funcionários
                 </CardDescription>
               </div>
-              {errorMsg && (
-                <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-800">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertTitle>Não autorizado</AlertTitle>
-                  <AlertDescription>{errorMsg}</AlertDescription>
-                </Alert>
-              )}
+              <ClientOnly>
+                {errorMsg && (
+                  <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-800">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Erro de Autenticação</AlertTitle>
+                    <AlertDescription>{errorMsg}</AlertDescription>
+                  </Alert>
+                )}
+              </ClientOnly>
             </CardHeader>
 
             <CardContent className="space-y-8">
@@ -126,5 +163,17 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   )
 }
