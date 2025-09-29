@@ -12,22 +12,18 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
-
-  useEffect(() => {
-    // Read error from URL on client to avoid Suspense requirement
-    const err = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('error') : null
+  // Captura o erro diretamente da URL, garantindo SSR/hidratação
+  let errorMsg: string | null = null;
+  if (typeof window !== 'undefined') {
+    const err = new URLSearchParams(window.location.search).get('error');
     if (err) {
-      // Map known NextAuth error codes to friendly messages
       const map: Record<string, string> = {
         AccessDenied: "Acesso negado. Seu e-mail não está autorizado.",
         OAuthAccountNotLinked: "Esta conta não está vinculada.",
-      }
-      setErrorMsg(map[err] || "Não foi possível autenticar. Tente novamente ou contate o suporte.")
-    } else {
-      setErrorMsg(null)
+      };
+      errorMsg = map[err] || "Não foi possível autenticar. Tente novamente ou contate o suporte.";
     }
-  }, [])
+  }
 
   const handleGoogleLogin = async () => {
     setIsLoading(true)
