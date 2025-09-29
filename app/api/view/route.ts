@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 
+// Força renderização dinâmica
+export const dynamic = 'force-dynamic'
+
 // Campos válidos para filtro (evita SQL injection em colunas)
 const ALLOWED_FILTERS = new Set([
   'nome',

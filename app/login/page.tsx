@@ -1,7 +1,7 @@
 "use client"
 
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Loader2, AlertTriangle } from 'lucide-react'
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
