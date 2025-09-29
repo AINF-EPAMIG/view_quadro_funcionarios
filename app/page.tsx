@@ -1,16 +1,17 @@
 "use client"
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Filter } from 'lucide-react'
+import { Filter, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import AppHeader from '@/components/AppHeader'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 
 type Colab = {
@@ -51,6 +52,7 @@ function ViewContent() {
   const [totalPages, setTotalPages] = useState(1)
   const [selected, setSelected] = useState<Colab | null>(null)
   const [open, setOpen] = useState(false)
+  const [showEmpty, setShowEmpty] = useState(false)
   const [filters, setFilters] = useState({
     chapa: '',
     nome: '',
@@ -63,12 +65,70 @@ function ViewContent() {
     status_colaborador: '',
   })
 
-  // Contagem de filtros ativos para exibir no "chip" (X/Y)
-  const { activeCount, totalCount } = useMemo(() => {
-    const entries = Object.entries(filters)
-    const active = entries.reduce((acc, [_, v]) => (String(v).trim() ? acc + 1 : acc), 0)
-    return { activeCount: active, totalCount: entries.length }
-  }, [filters])
+  type SortKey = 'id' | 'chapa' | 'nome' | 'cpf' | 'email' | 'cargo' | 'funcao' | 'data_admissao' | 'data_demissao' | 'chefe' | 'chefe_substituto' | 'status_colaborador' | 'regional' | 'departamento' | 'nivel'
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' } | null>({ key: 'id', dir: 'asc' })
+
+  const toggleSort = (key: SortKey) => {
+    setSort((prev) => {
+      if (!prev || prev.key !== key) return { key, dir: 'desc' } // primeiro clique: maior -> menor
+      return { key, dir: prev.dir === 'desc' ? 'asc' : 'desc' }
+    })
+    setPage(1)
+  }
+
+  const getSortValue = useCallback((item: Colab, key: SortKey): string | number | null => {
+    switch (key) {
+      case 'id':
+        return item.id
+      case 'data_admissao':
+        return item.data_admissao ? new Date(item.data_admissao).getTime() : null
+      case 'data_demissao':
+        return item.data_demissao ? new Date(item.data_demissao).getTime() : null
+      default: {
+        const v = item[key as keyof Colab]
+        if (v === undefined || v === null) return null
+        if (typeof v === 'number') return v
+        return String(v).trim().toLowerCase() || null
+      }
+    }
+  }, [])
+
+  const sortedData = useMemo(() => {
+    if (!sort) return data
+    const arr = [...data]
+    arr.sort((a, b) => {
+      const av = getSortValue(a, sort.key)
+      const bv = getSortValue(b, sort.key)
+      // Nulls sempre por último
+      const aNull = av === null || av === undefined || av === ''
+      const bNull = bv === null || bv === undefined || bv === ''
+      if (aNull && !bNull) return 1
+      if (!aNull && bNull) return -1
+      if (aNull && bNull) return 0
+      // Comparação numérica vs string
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return av - bv
+      }
+      const as = String(av)
+      const bs = String(bv)
+      if (as < bs) return -1
+      if (as > bs) return 1
+      return 0
+    })
+    if (sort.dir === 'desc') arr.reverse()
+    return arr
+  }, [data, sort, getSortValue])
+
+  const renderSortIcon = (key: SortKey, s: { key: SortKey; dir: 'asc' | 'desc' } | null) => {
+    if (!s || s.key !== key) return <ChevronsUpDown className="h-3.5 w-3.5 opacity-80" aria-hidden="true" />
+    return s.dir === 'asc' ? (
+      <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+    ) : (
+      <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+    )
+  }
+
+  // (removido: contagem de filtros não utilizada)
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams()
@@ -206,38 +266,65 @@ function ViewContent() {
                 </span>
               )}
             </div>
-            <div className="w-full overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="w-full overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm text-sm">
               <Table>
                 <TableHeader className="bg-[#025C3E] [&_tr]:border-[#025C3E] [&_th]:text-white [&_th]:font-semibold">
                   <TableRow className="hover:bg-transparent">
-                    <TableHead>ID</TableHead>
-                    <TableHead>Chapa</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>CPF</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Cargo</TableHead>
-                    <TableHead>Função</TableHead>
-                    <TableHead>Data Admissão</TableHead>
-                    <TableHead>Data Demissão</TableHead>
-                    <TableHead>Chefe</TableHead>
-                    <TableHead>Chefe Substituto</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Regional</TableHead>
-                    <TableHead>Departamento</TableHead>
-                    <TableHead>Nível</TableHead>
+                    <TableHead onClick={() => toggleSort('id')} className="cursor-pointer select-none" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort('id') } }}>
+                      <div className="flex items-center gap-1">ID {renderSortIcon('id', sort)}</div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort('chapa')} className="cursor-pointer select-none" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort('chapa') } }}>
+                      <div className="flex items-center gap-1">Chapa {renderSortIcon('chapa', sort)}</div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort('nome')} className="cursor-pointer select-none" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort('nome') } }}>
+                      <div className="flex items-center gap-1">Nome {renderSortIcon('nome', sort)}</div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort('cpf')} className="cursor-pointer select-none" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort('cpf') } }}>
+                      <div className="flex items-center gap-1">CPF {renderSortIcon('cpf', sort)}</div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort('email')} className="cursor-pointer select-none" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort('email') } }}>
+                      <div className="flex items-center gap-1">Email {renderSortIcon('email', sort)}</div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort('cargo')} className="cursor-pointer select-none" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort('cargo') } }}>
+                      <div className="flex items-center gap-1">Cargo {renderSortIcon('cargo', sort)}</div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort('funcao')} className="cursor-pointer select-none" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort('funcao') } }}>
+                      <div className="flex items-center gap-1">Função {renderSortIcon('funcao', sort)}</div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort('data_admissao')} className="cursor-pointer select-none" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort('data_admissao') } }}>
+                      <div className="flex items-center gap-1">Data Admissão {renderSortIcon('data_admissao', sort)}</div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort('chefe')} className="cursor-pointer select-none" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort('chefe') } }}>
+                      <div className="flex items-center gap-1">Chefe {renderSortIcon('chefe', sort)}</div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort('chefe_substituto')} className="cursor-pointer select-none" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort('chefe_substituto') } }}>
+                      <div className="flex items-center gap-1">Chefe Substituto {renderSortIcon('chefe_substituto', sort)}</div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort('status_colaborador')} className="cursor-pointer select-none" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort('status_colaborador') } }}>
+                      <div className="flex items-center gap-1">Status {renderSortIcon('status_colaborador', sort)}</div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort('regional')} className="cursor-pointer select-none" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort('regional') } }}>
+                      <div className="flex items-center gap-1">Regional {renderSortIcon('regional', sort)}</div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort('departamento')} className="cursor-pointer select-none" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort('departamento') } }}>
+                      <div className="flex items-center gap-1">Departamento {renderSortIcon('departamento', sort)}</div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort('nivel')} className="cursor-pointer select-none" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort('nivel') } }}>
+                      <div className="flex items-center gap-1">Nível {renderSortIcon('nivel', sort)}</div>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={15}>Carregando...</TableCell>
+                      <TableCell colSpan={14}>Carregando...</TableCell>
                     </TableRow>
                   ) : data.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={15}>Nenhum resultado</TableCell>
+                      <TableCell colSpan={14}>Nenhum resultado</TableCell>
                     </TableRow>
                   ) : (
-                    data.map((c) => (
+                    sortedData.map((c) => (
                       <TableRow
                         key={c.id}
                         className="cursor-pointer hover:bg-slate-50 focus:bg-slate-100"
@@ -263,11 +350,10 @@ function ViewContent() {
                         <TableCell>{display(c.cargo)}</TableCell>
                         <TableCell>{display(c.funcao)}</TableCell>
                         <TableCell className="whitespace-nowrap">{formatDate(c.data_admissao)}</TableCell>
-                        <TableCell className="whitespace-nowrap">{formatDate(c.data_demissao)}</TableCell>
                         <TableCell>{display(c.chefe)}</TableCell>
                         <TableCell>{display(c.chefe_substituto)}</TableCell>
                         <TableCell>
-                          <StatusBadge status={c.status_colaborador ?? ''} />
+                          <StatusBadge status={c.status_colaborador ?? ''} displayLabel={tableStatusLabelOverride(c.status_colaborador)} />
                         </TableCell>
                         <TableCell>{display(c.regional)}</TableCell>
                         <TableCell>{display(c.departamento)}</TableCell>
@@ -280,30 +366,72 @@ function ViewContent() {
             </div>
 
             <div className="flex items-center justify-between mt-4">
-              <Button
-                variant="outline"
-                disabled={page <= 1 || loading}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                Anterior
-              </Button>
-              <span className="text-sm text-slate-600">
-                Página {page} de {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                disabled={page >= totalPages || loading}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Próxima
-              </Button>
+              <span className="text-[13px] text-slate-600">Página {page} de {totalPages}</span>
+              <div className="flex items-center">
+                <div className="flex items-center gap-1 bg-slate-100 border border-slate-200 rounded-full px-2 py-1 shadow-sm">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 rounded-full text-[#025C3E] hover:bg-[#025C3E]/10"
+                    aria-label="Primeira página"
+                    disabled={page <= 1 || loading}
+                    onClick={() => setPage(1)}
+                  >
+                    <ChevronsLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 rounded-full text-[#025C3E] hover:bg-[#025C3E]/10"
+                    aria-label="Página anterior"
+                    disabled={page <= 1 || loading}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="px-1">
+                    <Select value={String(page)} onValueChange={(v) => setPage(Number(v))}>
+                      <SelectTrigger className="h-8 w-[90px] rounded-full bg-white border-slate-200 focus:ring-0">
+                        <SelectValue placeholder="Página" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: totalPages }, (_, i) => (
+                          <SelectItem key={i} value={String(i + 1)}>
+                            {i + 1}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 rounded-full text-[#025C3E] hover:bg-[#025C3E]/10"
+                    aria-label="Próxima página"
+                    disabled={page >= totalPages || loading}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 rounded-full text-[#025C3E] hover:bg-[#025C3E]/10"
+                    aria-label="Última página"
+                    disabled={page >= totalPages || loading}
+                    onClick={() => setPage(totalPages)}
+                  >
+                    <ChevronsRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
         {/* Details Modal */}
         <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSelected(null) }}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader className="bg-[#025C3E] text-white -m-6 mb-4 p-6 rounded-t-lg">
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[80vh] sm:max-h-[85vh] overflow-y-auto">
+            <DialogHeader className="bg-[#025C3E] text-white -m-6 mb-4 p-6 rounded-t-lg sticky top-0 z-10 shadow-sm">
               <DialogTitle className="flex flex-col text-white">
                 <span className="text-sm font-medium text-slate-100">Chapa {selected?.chapa}</span>
                 <span className="text-xl font-semibold text-white">{selected?.nome}</span>
@@ -312,33 +440,85 @@ function ViewContent() {
                 Informações detalhadas do colaborador
               </DialogDescription>
             </DialogHeader>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <InfoItem label="ID" value={selected?.id} />
-                <InfoItem label="Chapa" value={selected?.chapa} />
-                <InfoItem label="Nome" value={selected?.nome} />
-              <InfoItem label="CPF" value={selected?.cpf} />
-              <InfoItem label="Email" value={selected?.email} />
-              <InfoItem label="Cargo" value={selected?.cargo} />
-              <InfoItem label="Função" value={selected?.funcao} />
-              <InfoItem label="Data Admissão" value={formatDate(selected?.data_admissao)} />
-              <InfoItem label="Data Demissão" value={formatDate(selected?.data_demissao)} />
-              <InfoItem label="Chefe" value={selected?.chefe} />
-              <InfoItem label="Chefe Substituto" value={selected?.chefe_substituto} />
-              <InfoItem label="Regional" value={selected?.regional} />
-              <InfoItem label="Departamento" value={selected?.departamento} />
-              <InfoItem label="Divisão" value={selected?.divisao} />
-              <InfoItem label="Assessoria" value={selected?.assessoria} />
-              <InfoItem label="Fazenda" value={selected?.fazenda} />
-              <InfoItem label="Diretoria" value={selected?.diretoria} />
-              <InfoItem label="Gabinete" value={selected?.gabinete} />
-              <InfoItem label="Nível" value={selected?.nivel} />
-              <div className="border rounded-md p-3">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Status</div>
-                <div className="mt-1">
-                  <StatusBadge status={selected?.status_colaborador ?? ''} />
-                </div>
-              </div>
-            </div>
+            {(() => {
+              type FieldItem = { label: string; raw: string | number | null | undefined; value: string | number | null }
+              const fields: FieldItem[] = [
+                { label: 'ID', raw: selected?.id, value: selected?.id ?? null },
+                { label: 'Chapa', raw: selected?.chapa, value: selected?.chapa ?? null },
+                { label: 'Nome', raw: selected?.nome, value: selected?.nome ?? null },
+                { label: 'CPF', raw: selected?.cpf, value: selected?.cpf ?? null },
+                { label: 'Email', raw: selected?.email, value: selected?.email ?? null },
+                { label: 'Cargo', raw: selected?.cargo, value: selected?.cargo ?? null },
+                { label: 'Função', raw: selected?.funcao, value: selected?.funcao ?? null },
+                { label: 'Data Admissão', raw: selected?.data_admissao, value: formatDate(selected?.data_admissao) },
+                { label: 'Data Demissão', raw: selected?.data_demissao, value: formatDate(selected?.data_demissao) },
+                { label: 'Chefe', raw: selected?.chefe, value: selected?.chefe ?? null },
+                { label: 'Chefe Substituto', raw: selected?.chefe_substituto, value: selected?.chefe_substituto ?? null },
+                { label: 'Regional', raw: selected?.regional, value: selected?.regional ?? null },
+                { label: 'Departamento', raw: selected?.departamento, value: selected?.departamento ?? null },
+                { label: 'Divisão', raw: selected?.divisao, value: selected?.divisao ?? null },
+                { label: 'Assessoria', raw: selected?.assessoria, value: selected?.assessoria ?? null },
+                { label: 'Fazenda', raw: selected?.fazenda, value: selected?.fazenda ?? null },
+                { label: 'Diretoria', raw: selected?.diretoria, value: selected?.diretoria ?? null },
+                { label: 'Gabinete', raw: selected?.gabinete, value: selected?.gabinete ?? null },
+                { label: 'Nível', raw: selected?.nivel, value: selected?.nivel ?? null },
+              ]
+              const isEmpty = (v: unknown) => v === undefined || v === null || (typeof v === 'string' && v.trim() === '')
+              const visible = fields.filter(f => !isEmpty(f.raw))
+              const empty = fields.filter(f => isEmpty(f.raw))
+              const statusEmpty = isEmpty(selected?.status_colaborador)
+
+              return (
+                <>
+                  {/* Campos com valor */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {visible.map((f) => (
+                      <InfoItem key={f.label} label={f.label} value={f.value} />
+                    ))}
+                    {!statusEmpty && (
+                      <div className="border rounded-md p-3">
+                        <div className="text-xs uppercase tracking-wide text-slate-500">Status</div>
+                        <div className="mt-1">
+                          <StatusBadge status={selected?.status_colaborador ?? ''} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Toggle para exibir campos vazios */}
+                  {empty.length > 0 || statusEmpty ? (
+                    <Collapsible open={showEmpty} onOpenChange={setShowEmpty}>
+                      <div className="flex items-center justify-between mt-4 mb-2">
+                        <CollapsibleTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-9 rounded-full border-[#025C3E] text-[#025C3E] hover:bg-[#025C3E]/10 hover:text-[#025C3E]"
+                          >
+                            {showEmpty ? 'Ocultar campos vazios' : `Exibir campos vazios (${empty.length + (statusEmpty ? 1 : 0)})`}
+                          </Button>
+                        </CollapsibleTrigger>
+                      </div>
+                      <CollapsibleContent>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {empty.map((f) => (
+                            <InfoItem key={f.label} label={f.label} value={f.value} />
+                          ))}
+                          {statusEmpty && (
+                            <div className="border rounded-md p-3">
+                              <div className="text-xs uppercase tracking-wide text-slate-500">Status</div>
+                              <div className="mt-1">
+                                <StatusBadge status={selected?.status_colaborador ?? ''} />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  ) : null}
+                </>
+              )
+            })()}
           </DialogContent>
         </Dialog>
       </div>
@@ -368,30 +548,43 @@ function normalizeStatus(s: string) {
     .toLowerCase()
 }
 
-function StatusBadge({ status }: { status: string }) {
+// Map normalized keys to a color family. Treat anything that contains
+// 'afastamento' (e.g., 'atestado medico/afastamento') as 'afastamento'.
+function getStatusColorKey(key: string) {
+  if (key.includes('afastamento')) return 'afastamento' as const
+  if (key === 'ativo') return 'ativo' as const
+  if (key === 'inativo') return 'inativo' as const
+  if (key === 'ferias') return 'ferias' as const
+  if (key === 'ar') return 'ar' as const
+  if (key === 'licenca') return 'licenca' as const
+  return 'default' as const
+}
+
+function StatusBadge({ status, displayLabel }: { status: string; displayLabel?: string }) {
   const key = normalizeStatus(status || '')
-  let cls = 'bg-slate-100 text-slate-800 border-slate-200'
-  let label = status || '—'
-  switch (key) {
+  const colorKey = getStatusColorKey(key)
+  let cls = 'bg-slate-100 text-slate-800 border-slate-200 hover:bg-slate-200 hover:border-slate-300 transition-colors'
+  switch (colorKey) {
     case 'ativo':
-      cls = 'bg-green-100 text-green-800 border-green-200'
+      cls = 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200 hover:border-green-300 transition-colors'
       break
     case 'inativo':
-      cls = 'bg-red-100 text-red-800 border-red-200'
+      cls = 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200 hover:border-red-300 transition-colors'
       break
     case 'ferias':
-      cls = 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      cls = 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200 hover:border-yellow-300 transition-colors'
       break
     case 'ar':
-      cls = 'bg-blue-100 text-blue-800 border-blue-200'
+      cls = 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 hover:border-blue-300 transition-colors'
       break
     case 'licenca':
-      cls = 'bg-orange-100 text-orange-800 border-orange-200'
+      cls = 'bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-200 hover:border-orange-300 transition-colors'
       break
     case 'afastamento':
-      cls = 'bg-purple-100 text-purple-800 border-purple-200'
+      cls = 'bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 hover:border-purple-300 transition-colors'
       break
   }
+  const label = displayLabel ?? (status || '—')
   return <Badge className={cls}>{label}</Badge>
 }
 
@@ -408,4 +601,13 @@ function formatDate(v?: string | null) {
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   const yyyy = d.getFullYear()
   return `${dd}/${mm}/${yyyy}`
+}
+
+// Display helper: in the table, show 'Afastamento' for
+// 'Atestado Médico/Afastamento' while keeping original in the modal.
+function tableStatusLabelOverride(status?: string | null) {
+  if (!status) return undefined
+  const k = normalizeStatus(status)
+  if (k.includes('afastamento')) return 'Afastamento'
+  return undefined
 }

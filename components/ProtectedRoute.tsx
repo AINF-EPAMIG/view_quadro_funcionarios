@@ -11,7 +11,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const router = useRouter()
 
   useEffect(() => {

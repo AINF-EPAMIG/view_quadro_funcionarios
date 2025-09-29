@@ -1,16 +1,33 @@
 "use client"
 
 
-import { useState } from "react"
-import { Loader2 } from 'lucide-react'
+import { useState, useEffect } from "react"
+import { Loader2, AlertTriangle } from 'lucide-react'
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { signIn } from "next-auth/react"
 import AppHeader from "@/components/AppHeader"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Read error from URL on client to avoid Suspense requirement
+    const err = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('error') : null
+    if (err) {
+      // Map known NextAuth error codes to friendly messages
+      const map: Record<string, string> = {
+        AccessDenied: "Acesso negado. Seu e-mail não está autorizado.",
+        OAuthAccountNotLinked: "Esta conta não está vinculada.",
+      }
+      setErrorMsg(map[err] || "Não foi possível autenticar. Tente novamente ou contate o suporte.")
+    } else {
+      setErrorMsg(null)
+    }
+  }, [])
 
   const handleGoogleLogin = async () => {
     setIsLoading(true)
@@ -61,6 +78,13 @@ export default function LoginPage() {
                   Faça login para acessar a View do Quadro de Funcionários
                 </CardDescription>
               </div>
+              {errorMsg && (
+                <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-800">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Não autorizado</AlertTitle>
+                  <AlertDescription>{errorMsg}</AlertDescription>
+                </Alert>
+              )}
             </CardHeader>
 
             <CardContent className="space-y-8">

@@ -73,9 +73,32 @@ export async function GET(request: Request) {
     `
 
     // Executa em paralelo
+    type Row = {
+      id: number
+      chapa: string | null
+      nome: string | null
+      cpf: string | null
+      email: string | null
+      cargo: string | null
+      funcao: string | null
+      data_admissao: string | null
+      data_demissao: string | null
+      chefe: string | null
+      chefe_substituto: string | null
+      status_colaborador: string | null
+      regional: string | null
+      departamento: string | null
+      divisao: string | null
+      assessoria: string | null
+      fazenda: string | null
+      diretoria: string | null
+      gabinete: string | null
+      nivel: string | null
+    }
+
     const [rows, countRows] = await Promise.all([
-      query(sql, params) as Promise<any[]>,
-      query(countSql, params) as Promise<any[]>,
+      query(sql, params) as Promise<Row[]>,
+      query(countSql, params) as Promise<Array<{ total: number }>>,
     ])
 
     const total = countRows?.[0]?.total || 0
@@ -89,7 +112,7 @@ export async function GET(request: Request) {
         totalPages: Math.ceil(total / pageSize),
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erro na API /api/view:', error)
     return NextResponse.json({ error: 'Erro ao buscar colaboradores' }, { status: 500 })
   }
