@@ -46,19 +46,29 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
-    async jwt({ token, account }) {
+    async jwt({ token, account, user }) {
       if (account) {
         token.accessToken = account.access_token;
       }
+      
+      // Garantir que token tenha todas as propriedades necessárias
+      if (user) {
+        token.picture = user.image;
+      }
+      
       return token;
     },
   },
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 dias
+  },
+  jwt: {
+    maxAge: 30 * 24 * 60 * 60, // 30 dias
   },
   pages: {
     signIn: "/login",
     error: "/login",
   },
-  secret: process.env.NEXTAUTH_SECRET || "16cb14b902a9f90b45728dedfb2cc31cfac127b3b2a730cbb4ec103db94934aa",
+  secret: process.env.NEXTAUTH_SECRET,
 };
